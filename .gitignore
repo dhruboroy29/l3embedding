@@ -2,4 +2,4 @@
 *.pyc
 *.err
 *.out
-
+.ipynb_checkpoints/
