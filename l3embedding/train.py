@@ -264,7 +264,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
         latest_model_path = os.path.join(continue_model_dir, 'model_latest.h5')
         m, inputs, outputs = load_model(latest_model_path, model_type, return_io=True, src_num_gpus=gpus)
     else:
-        m, inputs, outputs = MODELS[model_type](num_gpus=gpus)
+        m, inputs, outputs = MODELS[model_type](num_gpus=gpus) # Why is num_gpus inportant here?
 
     # NOTE: this results in twice the loss as in categorical crossentropy!
     loss = 'categorical_crossentropy'
