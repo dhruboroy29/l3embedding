@@ -39,10 +39,10 @@ def construct_cnn_L3_melspec2():
             (Type: keras.layers.Layer)
     """
     vision_model, x_i, y_i = construct_cnn_L3_orig_vision_model()
-    audio_model, x_a, y_a = construct_cnn_L3_melspec2_audio_model()
+    audio_model, x_a, y_a, out_binary_mask = construct_cnn_L3_melspec2_audio_model()
 
     m = L3_merge_audio_vision_models(vision_model, x_i, audio_model, x_a, 'cnn_L3_kapredbinputbn')
-    return m
+    return m, out_binary_mask
 
 
 # Audio model with added DeepIoT_dropout layers
@@ -195,7 +195,7 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     m = Model(inputs=x_a, outputs=y_a)
     m.name = 'audio_model'
 
-    return m, x_a, y_a
+    return m, x_a, y_a, out_binary_mask
 
 
 # Vision model
