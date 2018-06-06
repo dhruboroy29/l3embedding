@@ -63,7 +63,7 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
             (Type: keras.layers.Layer)
     """
     ####
-    # Audio subnetwork with added DeepIoT_dropout layers
+    # Audio subnetwork with added DeepIoT_dropout layers and variable scopes
     ####
     weight_decay = 1e-5
     n_dft = 2048
@@ -87,8 +87,6 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
                       power_melgram=1.0, htk=True, # n_win=n_win,
                       return_decibel_melgram=True, padding='same')(x_a)
 
-
-    ## Model: variable_scopes added by Dhrubo for use with compressor ##
 
     # CONV BLOCK 1
     pool_size_a_1 = (2, 2)
