@@ -440,14 +440,14 @@ if __name__=='__main__':
     validation_data_dir = '../music_sample/valid_samp'
     output_dir = '../music_sample/out'
     num_epochs = 1
-    train_epoch_size = 128
-    validation_epoch_size = 128
+    train_epoch_size = 64 #128
+    validation_epoch_size = 64 #128
     train_batch_size = 64
     validation_batch_size = 64
     model_type = 'cnn_L3_melspec2'
     random_state = 20180123
     learning_rate = 1e-4
-    verbose = False
+    verbose = True
     checkpoint_interval = 10
     log_path = None
     disable_logging = False
@@ -458,4 +458,4 @@ if __name__=='__main__':
     train(train_data_dir=train_data_dir,validation_data_dir=validation_data_dir,output_dir=output_dir,
           num_epochs=num_epochs, train_epoch_size=train_epoch_size, validation_epoch_size=validation_epoch_size,
           train_batch_size=train_batch_size, validation_batch_size=validation_batch_size,
-          model_type=model_type, random_state=random_state, learning_rate=learning_rate)
+          model_type=model_type, random_state=random_state, learning_rate=learning_rate, verbose=verbose)
