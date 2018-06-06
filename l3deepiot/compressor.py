@@ -5,7 +5,7 @@ from .DeepIoT_utils import *
 def concat_weight_mat(weight_dict):
     cancat_weight_dict = {}
     for layer_name in weight_dict.keys():
-        if not 'cell' in layer_name:
+        if not 'cell' in layer_name: # Applicable to L3 embedding
             cur_w = weight_dict[layer_name][u'weights:0']
             cur_b = weight_dict[layer_name][u'biases:0']
             cur_w_shape = cur_w.get_shape().as_list()
@@ -17,7 +17,7 @@ def concat_weight_mat(weight_dict):
             cur_b = tf.expand_dims(cur_b, 0)
             weight = tf.concat(axis=0, values=[cur_w, cur_b])
             cancat_weight_dict[layer_name] = weight
-        else:
+        else: # Not applicable to L3 embedding
             gates_w = weight_dict[layer_name][u'gates'][u'kernel:0']
             gates_b = weight_dict[layer_name][u'gates'][u'bias:0']
             candidate_w = weight_dict[layer_name][u'candidate'][u'kernel:0']
@@ -97,8 +97,8 @@ def compressor(d_vars, inter_dim=64, reuse=False, name='compressor'):
         for var in d_vars:
             if '_BN' in var.name:
                 continue
-            if not 'deepSense/' in var.name:
-                continue
+            #if not 'deepSense/' in var.name:
+            #    continue
             var_name_list = var.name.split('/')
             if len(var_name_list) == 3:
                 if not var_name_list[1] in org_weight_dict.keys():
