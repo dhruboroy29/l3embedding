@@ -10,12 +10,12 @@ Imports
 '''
 from keras.models import Model
 from keras.layers import Input, Conv2D, BatchNormalization, MaxPooling2D, \
-    Flatten, Activation, concatenate, Dense
+    Flatten, Activation, concatenate, Dense, Lambda
 from keras import backend as K
 from kapre.time_frequency import Melspectrogram
 import tensorflow as tf
 import keras.regularizers as regularizers
-from .DeepIoT_dropOut import dropout as DeepIoT_dropout
+from .DeepIoT_dropOut import dropout as DeepIoT_dropout, prev_binary_tensor as prev_binary_tensor
 from .DeepIoT_utils import *
 
 
@@ -39,14 +39,14 @@ def construct_cnn_L3_melspec2():
             (Type: keras.layers.Layer)
     """
     vision_model, x_i, y_i = construct_cnn_L3_orig_vision_model()
-    audio_model, x_a, y_a, out_binary_mask = construct_cnn_L3_melspec2_audio_model()
+    audio_model, x_a, y_a = construct_cnn_L3_melspec2_audio_model()
 
-    m = L3_merge_audio_vision_models(vision_model, x_i, audio_model, x_a, 'cnn_L3_kapredbinputbn')
-    return m, out_binary_mask
+    m = L3_merge_audio_vision_models(vision_model, x_i, audio_model, x_a, 'cnn_L3_melspec2') # 'cnn_L3_kapredbinputbn'
+    return m
 
 
 # Audio model with added DeepIoT_dropout layers
-def construct_cnn_L3_melspec2_audio_model(train=True):
+def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True):
     """
     Constructs a model that replicates the audio subnetwork  used in Look,
     Listen and Learn
@@ -78,7 +78,7 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     out_binary_mask = {}
 
     # INPUT
-    x_a = Input(shape=(1, asr * audio_window_dur), dtype='float32')
+    x_a = Input(batch_shape=(batch_size, 1, asr * audio_window_dur), dtype='float32')
 
 
     # MELSPECTROGRAM PREPROCESSING
@@ -106,11 +106,13 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     y_a = Activation('relu')(y_a)
     y_a = MaxPooling2D(pool_size=pool_size_a_1, strides=2)(y_a)
     conv1_shape = y_a.get_shape().as_list()
-    y_a, conv1_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv1, prun_thres, sol_train),
-                                                    is_training=train,
-                                                    noise_shape=[conv1_shape[0], 1, 1, conv1_shape[3]],
-                                                    name='conv1_dropout1')
-    out_binary_mask[u'conv1'] = conv1_dropB1
+    y_a = Lambda(lambda input: DeepIoT_dropout(input, dropOut_prun(prob_list_conv1, prun_thres, sol_train),
+                                                               is_training=train,
+                                                               noise_shape=[conv1_shape[0], 1, 1, conv1_shape[3]],
+                                                               name='conv1_dropout1'))(y_a)
+
+
+    #out_binary_mask[u'conv1'] = conv1_dropB1
 
 
     # CONV BLOCK 2
@@ -131,11 +133,11 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     y_a = Activation('relu')(y_a)
     y_a = MaxPooling2D(pool_size=pool_size_a_2, strides=2)(y_a)
     conv2_shape = y_a.get_shape().as_list()
-    y_a, conv2_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv2, prun_thres, sol_train),
-                                        is_training=train,
-                                        noise_shape=[conv2_shape[0], 1, 1, conv2_shape[3]],
-                                        name='conv2_dropout1')
-    out_binary_mask[u'conv2'] = conv2_dropB1
+    y_a = Lambda(lambda input: DeepIoT_dropout(input, dropOut_prun(prob_list_conv2, prun_thres, sol_train),
+                                               is_training=train,
+                                               noise_shape=[conv2_shape[0], 1, 1, conv2_shape[3]],
+                                               name='conv2_dropout1'))(y_a)
+    #out_binary_mask[u'conv2'] = conv2_dropB1
 
 
     # CONV BLOCK 3
@@ -156,11 +158,15 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     y_a = Activation('relu')(y_a)
     y_a = MaxPooling2D(pool_size=pool_size_a_3, strides=2)(y_a)
     conv3_shape = y_a.get_shape().as_list()
-    y_a, conv3_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv3, prun_thres, sol_train),
+    y_a = Lambda(lambda input: DeepIoT_dropout(input, dropOut_prun(prob_list_conv3, prun_thres, sol_train),
                                         is_training=train,
                                         noise_shape=[conv3_shape[0], 1, 1, conv3_shape[3]],
-                                        name='conv3_dropout1')
-    out_binary_mask[u'conv3'] = conv3_dropB1
+                                        name='conv3_dropout1'))(y_a)
+    '''y_a, conv3_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv3, prun_thres, sol_train),
+                                        is_training=train,
+                                        noise_shape=[conv3_shape[0], 1, 1, conv3_shape[3]],
+                                        name='conv3_dropout1')'''
+    #out_binary_mask[u'conv3'] = conv3_dropB1
 
 
     # CONV BLOCK 4
@@ -182,11 +188,15 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     y_a = Activation('relu')(y_a)
     y_a = MaxPooling2D(pool_size=pool_size_a_4)(y_a)
     conv4_shape = y_a.get_shape().as_list()
-    y_a, conv4_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv4, prun_thres, sol_train),
+    y_a = Lambda(lambda input: DeepIoT_dropout(input, dropOut_prun(prob_list_conv4, prun_thres, sol_train),
                                         is_training=train,
                                         noise_shape=[conv4_shape[0], 1, 1, conv4_shape[3]],
-                                        name='conv4_dropout1')
-    out_binary_mask[u'conv4'] = conv4_dropB1
+                                        name='conv4_dropout1'))(y_a)
+    '''y_a, conv4_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv4, prun_thres, sol_train),
+                                        is_training=train,
+                                        noise_shape=[conv4_shape[0], 1, 1, conv4_shape[3]],
+                                        name='conv4_dropout1')'''
+    #out_binary_mask[u'conv4'] = conv4_dropB1
 
 
     # FLATTEN
@@ -195,11 +205,11 @@ def construct_cnn_L3_melspec2_audio_model(train=True):
     m = Model(inputs=x_a, outputs=y_a)
     m.name = 'audio_model'
 
-    return m, x_a, y_a, out_binary_mask
+    return m, x_a, y_a
 
 
 # Vision model
-def construct_cnn_L3_orig_vision_model():
+def construct_cnn_L3_orig_vision_model(batch_size=64):
     """
     Constructs a model that replicates the vision subnetwork  used in Look,
     Listen and Learn
@@ -220,7 +230,7 @@ def construct_cnn_L3_orig_vision_model():
     # Image subnetwork
     ####
     # INPUT
-    x_i = Input(shape=(224, 224, 3), dtype='float32')
+    x_i = Input(batch_shape=(batch_size, 224, 224, 3), dtype='float32')
 
     # CONV BLOCK 1
     n_filter_i_1 = 64
