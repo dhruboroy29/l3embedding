@@ -1,6 +1,6 @@
 from .training_utils import multi_gpu_model
 import tensorflow as tf
-from .audio_model_consts import *
+from .consts_globals import *
 
 '''
 Utils

@@ -99,7 +99,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv1_2"):
             y_a = Conv2D(n_filter_a_1, filt_size_a_1, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay))(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay), name='conv1')(y_a)
         with tf.variable_scope("conv1_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -126,7 +126,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv2_2"):
             y_a = Conv2D(n_filter_a_2, filt_size_a_2, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay))(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay), name='conv2')(y_a)
         with tf.variable_scope("conv2_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -151,7 +151,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv3_2"):
             y_a = Conv2D(n_filter_a_3, filt_size_a_3, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay))(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay),name='conv3')(y_a)
         with tf.variable_scope("conv3_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)

@@ -6,8 +6,8 @@ def concat_weight_mat(weight_dict):
     cancat_weight_dict = {}
     for layer_name in weight_dict.keys():
         if not 'cell' in layer_name: # Applicable to L3 embedding
-            cur_w = weight_dict[layer_name][u'weights:0']
-            cur_b = weight_dict[layer_name][u'biases:0']
+            cur_w = weight_dict[layer_name][u'kernel:0']
+            cur_b = weight_dict[layer_name][u'bias:0']
             cur_w_shape = cur_w.get_shape().as_list()
             new_w_shape_a = 1
             for idx in range(len(cur_w_shape) - 1):
@@ -78,7 +78,7 @@ def transback(out_list, weight_list, ord_list):
                                   tf.truncated_normal_initializer(
                                       stddev=np.power(2.0 / (cell_out_shape[1] + weight_shape[1]), 0.5)))
         drop_out_prob = tf.nn.sigmoid(tf.matmul(cell_out, maxtrix))
-        if type(layer_name) == type([]):
+        '''if type(layer_name) == type([]):
             if '3' in layer_name[0]:
                 for sub_layer_name in layer_name:
                     drop_prob_dict[sub_layer_name] = drop_out_prob
@@ -86,8 +86,9 @@ def transback(out_list, weight_list, ord_list):
                 drop_out_prob0, drop_out_prob1 = tf.split(axis=1, num_or_size_splits=2, value=drop_out_prob)
                 drop_prob_dict[layer_name[0]] = drop_out_prob0
                 drop_prob_dict[layer_name[1]] = drop_out_prob1
-        else:
-            drop_prob_dict[layer_name] = drop_out_prob
+        else:'''
+        # For L3, ord_list is flat
+        drop_prob_dict[layer_name] = drop_out_prob
     return drop_prob_dict
 
 
@@ -97,24 +98,27 @@ def compressor(d_vars, inter_dim=64, reuse=False, name='compressor'):
         for var in d_vars:
             if '_BN' in var.name:
                 continue
-            #if not 'deepSense/' in var.name:
-            #    continue
+            if 'melspectrogram' in var.name: # Not interested in melspec layer
+                continue
+            if not 'audio_model/' in var.name: # Only interested in the audio subnet
+                continue
             var_name_list = var.name.split('/')
-            if len(var_name_list) == 3:
-                if not var_name_list[1] in org_weight_dict.keys():
-                    org_weight_dict[var_name_list[1]] = {}
-                org_weight_dict[var_name_list[1]][var_name_list[2]] = var
-            elif len(var_name_list) == 7:
+            if len(var_name_list) == 5:
+                if not var_name_list[3] in org_weight_dict.keys():
+                    org_weight_dict[var_name_list[3]] = {}
+                org_weight_dict[var_name_list[3]][var_name_list[4]] = var
+            #  No RNN components in L3
+            '''elif len(var_name_list) == 7:
                 if not var_name_list[3] in org_weight_dict.keys():
                     org_weight_dict[var_name_list[3]] = {}
                 if not var_name_list[5] in org_weight_dict[var_name_list[3]].keys():
                     org_weight_dict[var_name_list[3]][var_name_list[5]] = {}
-                org_weight_dict[var_name_list[3]][var_name_list[5]][var_name_list[6]] = var
+                org_weight_dict[var_name_list[3]][var_name_list[5]][var_name_list[6]] = var'''
 
         cancat_weight_dict = concat_weight_mat(org_weight_dict)
         # ord_list = [[u'acc_conv1', u'gyro_conv1'], [u'acc_conv2', u'gyro_conv2'], [u'acc_conv3', u'gyro_conv3'],
         # 			u'sensor_conv1', u'sensor_conv2', u'sensor_conv3', u'cell_0', u'cell_1', u'output']
-        ord_list = [u'conv1', u'conv2', u'conv3', u'conv4']
+        ord_list = [u'conv1', u'conv2', u'conv3', u'audio_embedding_layer']
         weight_list = merg_ord_mat(cancat_weight_dict, ord_list)
 
         vec_list = trans_mat2vec(weight_list, inter_dim)
@@ -133,14 +137,14 @@ def compressor(d_vars, inter_dim=64, reuse=False, name='compressor'):
     return drop_prob_dict
 
 
-def gen_compressor_loss(drop_prob_dict, out_binary_mask, batchLoss, ema, lossMean, lossStd):
+def gen_compressor_loss(drop_prob_dict, out_binary_mask, batchLoss, ema, lossMean, lossStd, batch_size=64):
     compsBatchLoss = 0
     for layer_name in drop_prob_dict.keys():
         drop_prob = dropOut_prun(drop_prob_dict[layer_name], prun_thres, sol_train)
         out_binary = out_binary_mask[layer_name]
-        if 'conv' in layer_name:
+        if ('conv' in layer_name) or ('audio_embedding' in layer_name):
             out_binary = tf.squeeze(out_binary)
-        drop_prob = tf.tile(drop_prob, [BATCH_SIZE, 1])
+        drop_prob = tf.tile(drop_prob, [batch_size, 1])
         neg_drop_prob = 1.0 - drop_prob
         neg_out_binary = tf.abs(1.0 - out_binary)
         compsBatchLoss += tf.reduce_sum(tf.log(drop_prob * out_binary + neg_drop_prob * neg_out_binary), 1)
