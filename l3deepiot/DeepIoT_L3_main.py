@@ -223,6 +223,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
           learning_rate=1e-4, verbose=False, checkpoint_interval=10,
           log_path=None, disable_logging=False, gpus=1, continue_model_dir=None,
           gsheet_id=None, google_dev_app_name=None):
+
     # Link Tensorflow session to Keras session
     sess = tf.Session()
     K.set_session(sess)
@@ -440,14 +441,15 @@ if __name__=='__main__':
     validation_data_dir = '../music_sample/valid_samp'
     output_dir = '../music_sample/out'
     num_epochs = 1
-    train_epoch_size = 64 #128
-    validation_epoch_size = 64 #128
+    # Two mini-batches in an epoch
+    train_epoch_size = 128
+    validation_epoch_size = 128
     train_batch_size = 64
     validation_batch_size = 64
     model_type = 'cnn_L3_melspec2'
     random_state = 20180123
     learning_rate = 1e-4
-    verbose = True
+    verbose = False
     checkpoint_interval = 10
     log_path = None
     disable_logging = False
