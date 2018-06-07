@@ -15,7 +15,7 @@ import pescador
 from skimage import img_as_float
 
 from gsheets import get_credentials, append_row, update_experiment, get_row
-from l3deepiot.model import MODELS #, load_model TODO: Remove this comment after modifying load_model() for DeepIoT
+from l3deepiot.model import MODELS, out_binary_mask #, load_model TODO: Remove this comment after modifying load_model() for DeepIoT
 from l3deepiot.audio import pcm2float
 from l3deepiot.compressor import * # Added by Dhrubo
 from log import *

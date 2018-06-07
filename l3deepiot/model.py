@@ -15,7 +15,7 @@ from keras import backend as K
 from kapre.time_frequency import Melspectrogram
 import tensorflow as tf
 import keras.regularizers as regularizers
-from .DeepIoT_dropOut import dropout as DeepIoT_dropout
+from .DeepIoT_dropOut import dropout as DeepIoT_dropout, out_binary_mask
 from .DeepIoT_utils import *
 
 
@@ -74,8 +74,6 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True):
     asr = 48000
     audio_window_dur = 1
 
-    # Added by Dhrubo: DeepIoT mask
-    out_binary_mask = {}
 
     # INPUT
     x_a = Input(batch_shape=(batch_size, 1, asr * audio_window_dur), dtype='float32')
