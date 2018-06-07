@@ -3,3 +3,5 @@
 *.err
 *.out
 .ipynb_checkpoints/
+out/
+*.log
