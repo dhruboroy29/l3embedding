@@ -228,6 +228,9 @@ def train(train_data_dir, validation_data_dir, output_dir,
     sess = tf.Session()
     K.set_session(sess)
 
+    with sess.as_default():
+        tf.global_variables_initializer().run()
+
     init_console_logger(LOGGER, verbose=verbose)
     if not disable_logging:
         init_file_logger(LOGGER, log_path=log_path)
@@ -274,6 +277,12 @@ def train(train_data_dir, validation_data_dir, output_dir,
 
     loss = 'binary_crossentropy'
     metrics = ['accuracy']
+
+    # Initialize compressor
+    t_vars = tf.trainable_variables()
+    d_vars = [var for var in t_vars if 'audio_model/' in var.name]
+
+    drop_prob_dict = compressor(d_vars)
 
     # Make sure the directories we need exist
     # TODO: Uncomment after modifying load_model() for DeepIoT
@@ -416,6 +425,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
     '''if continue_model_dir is not None:
         initial_epoch = last_epoch_idx + 1
     else:'''
+    # Initialize critic
     initial_epoch = 0
     history = m.fit_generator(train_gen, train_epoch_size, num_epochs,
                               validation_data=val_gen,
