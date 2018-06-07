@@ -427,7 +427,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
 
     LOGGER.info('Done training. Saving results to disk...')
     # Save history
-    with open(os.path.join(model_dir, 'history.pkl'), 'wb') as fd:
+    with open(os.path.join(model_dir, 'history_initcritic.pkl'), 'wb') as fd:
         pickle.dump(history.history, fd)
 
     LOGGER.info('Done!')
