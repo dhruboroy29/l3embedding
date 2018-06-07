@@ -15,7 +15,7 @@ from keras import backend as K
 from kapre.time_frequency import Melspectrogram
 import tensorflow as tf
 import keras.regularizers as regularizers
-from .DeepIoT_dropOut import dropout as DeepIoT_dropout, prev_binary_tensor as prev_binary_tensor
+from .DeepIoT_dropOut import dropout as DeepIoT_dropout
 from .DeepIoT_utils import *
 
 

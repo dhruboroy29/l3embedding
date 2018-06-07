@@ -23,4 +23,4 @@ def dropout(x, keep_prob, is_training=False, noise_shape=None, seed=None, name=N
                       lambda: x * keep_prob)
 
         ret.set_shape(x.get_shape())
-        return ret, binary_tensor
+        return ret#, binary_tensor
