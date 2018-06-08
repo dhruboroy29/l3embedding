@@ -273,16 +273,8 @@ def train(train_data_dir, validation_data_dir, output_dir,
         latest_model_path = os.path.join(continue_model_dir, 'model_latest.h5')
         m, inputs, outputs = load_model(latest_model_path, model_type, return_io=True, src_num_gpus=gpus)
     else:'''
+    # Initialize L3 model (critic)
     m, inputs, outputs = MODELS[model_type](num_gpus=gpus) # Why is num_gpus inportant here?
-
-    loss = 'binary_crossentropy'
-    metrics = ['accuracy']
-
-    # Initialize compressor
-    t_vars = tf.trainable_variables()
-    d_vars = [var for var in t_vars if 'audio_model/' in var.name]
-
-    drop_prob_dict = compressor(d_vars)
 
     # Make sure the directories we need exist
     # TODO: Uncomment after modifying load_model() for DeepIoT
@@ -295,8 +287,8 @@ def train(train_data_dir, validation_data_dir, output_dir,
 
     LOGGER.info('Compiling model...')
     m.compile(Adam(lr=learning_rate),
-              loss=loss,
-              metrics=metrics)
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
 
     LOGGER.info('Model files can be found in "{}"'.format(model_dir))
 
@@ -386,6 +378,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
     if gsheet_id:
         cb.append(GSheetLogger(google_dev_app_name, gsheet_id, param_dict))
 
+    LOGGER.info('Begin critic initialization phase')
     LOGGER.info('Setting up train data generator...')
     # TODO: Uncomment after modifying load_model() for DeepIoT
     '''if continue_model_dir is not None:
@@ -425,7 +418,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
     '''if continue_model_dir is not None:
         initial_epoch = last_epoch_idx + 1
     else:'''
-    # Initialize critic
+
     initial_epoch = 0
     history = m.fit_generator(train_gen, train_epoch_size, num_epochs,
                               validation_data=val_gen,
@@ -435,10 +428,191 @@ def train(train_data_dir, validation_data_dir, output_dir,
                               verbose=verbosity,
                               initial_epoch=initial_epoch)
 
-    LOGGER.info('Done training. Saving results to disk...')
     # Save history
     with open(os.path.join(model_dir, 'history_initcritic.pkl'), 'wb') as fd:
         pickle.dump(history.history, fd)
+
+    # Initialize compressor
+    t_vars = tf.trainable_variables()
+    d_vars = [var for var in t_vars if 'audio_model/' in var.name]
+
+    batchLoss = tf.placeholder(tf.float32)
+    batchLossMean, batchLossVar = tf.nn.moments(batchLoss, axes=[0])
+    lossMean = tf.reduce_mean(batchLossMean)
+    lossStd = tf.reduce_mean(tf.sqrt(batchLossVar))
+
+    movingAvg_decay = 0.99
+    ema = tf.train.ExponentialMovingAverage(0.9)
+    maintain_averages_op = ema.apply([lossMean, lossStd])
+
+    drop_prob_dict = compressor(d_vars)
+
+    compsLoss = gen_compressor_loss(drop_prob_dict, out_binary_mask, batchLoss, ema, lossMean, lossStd)
+    update_drop_op_dict = update_drop_op(drop_prob_dict, prob_list_dict)
+
+    t_vars = tf.trainable_variables()
+    # no_c_vars = [var for var in t_vars if not 'compressor/' in var.name]
+    c_vars = [var for var in t_vars if 'compressor/' in var.name]
+
+    compsOptimizer = tf.train.RMSPropOptimizer(0.001).minimize(compsLoss,
+                                                               var_list=c_vars, global_step=comps_global_step)
+
+    left_num_dict = count_prun(prob_list_dict, prun_thres)
+
+    ###### Start Compressing
+    print('Begin compressor-critic joint training phase')
+    LOGGER.info('Setting up train data generator...')
+    # TODO: Uncomment after modifying load_model() for DeepIoT
+    '''if continue_model_dir is not None:
+        train_start_batch_idx = train_epoch_size * (last_epoch_idx + 1)
+    else:'''
+    train_start_batch_idx = None
+
+    train_gen = data_generator(
+        train_data_dir,
+        batch_size=train_batch_size,
+        random_state=random_state,
+        start_batch_idx=train_start_batch_idx)
+
+    train_gen = pescador.maps.keras_tuples(train_gen,
+                                           ['video', 'audio'],
+                                           'label')
+
+    LOGGER.info('Setting up validation data generator...')
+    val_gen = single_epoch_data_generator(
+        validation_data_dir,
+        validation_epoch_size,
+        batch_size=validation_batch_size,
+        random_state=random_state)
+
+    val_gen = pescador.maps.keras_tuples(val_gen,
+                                         ['video', 'audio'],
+                                         'label')
+
+    # Fit the model
+    LOGGER.info('Fitting models...')
+    if verbose:
+        verbosity = 1
+    else:
+        verbosity = 2
+
+    with sess.as_default():
+        thres_update_count = 0
+        sess.run(tf.assign(sol_train, 0.0))
+        for iteration in range(TOTAL_ITER_NUM):
+
+            # Train Critic (one run)
+            train_next = next(train_gen)
+            history = m.fit(train_next, train_epoch_size, num_epochs=1)
+            #_, lossV, _trainY, _predict = sess.run([discOptimizer, loss, batch_label, predict])
+            tf.assign(batchLoss,tf.convert_to_tensor(history.history['loss'])) # Assign loss to tensor
+
+            # Train Compressor
+            _, compsLossV, _, lossMeanV, lossStdV = \
+                sess.run([compsOptimizer, compsLoss, maintain_averages_op, ema.average(lossMean), ema.average(lossStd)])
+
+            for layer_name in update_drop_op_dict.keys():
+                sess.run(update_drop_op_dict[layer_name])
+
+            if iteration % UPDATE_STEP == 0 and thres_update_count <= THRES_STEP:
+                cur_thres = START_THRES + thres_update_count * (FINAL_THRES - START_THRES) / THRES_STEP
+                print('Cur Threshold:', cur_thres)
+                sess.run(tf.assign(prun_thres, cur_thres))
+                thres_update_count += 1
+
+            if iteration % 200 == 199:
+                history = m.evaluate_generator(val_gen, steps=validation_epoch_size)
+                dev_accuracy = np.mean(history.history['acc'])
+                #dev_cross_entropy = []
+                #for eval_idx in range(EVAL_ITER_NUM):
+                #   eval_loss_v, _trainY, _predict = sess.run([loss_eval, batch_eval_label, predict_eval])
+                #    _label = np.argmax(_trainY, axis=1)
+                #    _accuracy = np.mean(_label == _predict)
+                #    dev_accuracy.append(_accuracy)
+                #    dev_cross_entropy.append(eval_loss_v)
+                #plot.plot('dev accuracy', np.mean(dev_accuracy))
+                #plot.plot('dev cross entropy', np.mean(dev_cross_entropy))
+                cur_left_num = gen_cur_prun(sess, left_num_dict)
+                print
+                'Left Element in DeepSense:', cur_left_num
+                cur_comps_ratio = compress_ratio(cur_left_num, org_dim_dict)
+                if cur_comps_ratio < 7.0 and np.mean(dev_accuracy) >= 0.93:
+                    break
+
+    ###### Start Fine-Tuning critic
+    print('\nBegin fine-tunning critic')
+    sess.run(tf.assign(sol_train, 1.0))
+    cur_left_num = gen_cur_prun(sess, left_num_dict)
+    print('Compressed l3 embedding:', cur_left_num)
+    compress_ratio(cur_left_num, org_dim_dict)
+    LOGGER.info('Setting up train data generator...')
+    # TODO: Uncomment after modifying load_model() for DeepIoT
+    '''if continue_model_dir is not None:
+        train_start_batch_idx = train_epoch_size * (last_epoch_idx + 1)
+    else:'''
+    train_start_batch_idx = None
+
+    train_gen = data_generator(
+        train_data_dir,
+        batch_size=train_batch_size,
+        random_state=random_state,
+        start_batch_idx=train_start_batch_idx)
+
+    train_gen = pescador.maps.keras_tuples(train_gen,
+                                           ['video', 'audio'],
+                                           'label')
+
+    LOGGER.info('Setting up validation data generator...')
+    val_gen = single_epoch_data_generator(
+        validation_data_dir,
+        validation_epoch_size,
+        batch_size=validation_batch_size,
+        random_state=random_state)
+
+    val_gen = pescador.maps.keras_tuples(val_gen,
+                                         ['video', 'audio'],
+                                         'label')
+
+    # Fit the model
+    LOGGER.info('Fitting models...')
+    if verbose:
+        verbosity = 1
+    else:
+        verbosity = 2
+
+    initial_epoch = 0
+    history = m.fit_generator(train_gen, train_epoch_size, num_epochs,
+                              validation_data=val_gen,
+                              validation_steps=validation_epoch_size,
+                              # use_multiprocessing=True,
+                              callbacks=cb,
+                              verbose=verbosity,
+                              initial_epoch=initial_epoch)
+
+    # Save history
+    LOGGER.info('Done training. Saving results to disk...')
+    with open(os.path.join(model_dir, 'history_finetunecritic.pkl'), 'wb') as fd:
+        pickle.dump(history.history, fd)
+    print('Final validation accuracy: ', history.history['val_acc'])
+
+    '''for iteration in xrange(TOTAL_ITER_NUM):
+        _, lossV, _trainY, _predict = sess.run([discOptimizer, loss, batch_label, predict])
+        _label = np.argmax(_trainY, axis=1)
+        _accuracy = np.mean(_label == _predict)
+        plot.plot('train cross entropy', lossV)
+        plot.plot('train accuracy', _accuracy)
+
+        if iteration % 50 == 49:
+            dev_accuracy = []
+            dev_cross_entropy = []
+            for eval_idx in xrange(EVAL_ITER_NUM):
+                eval_loss_v, _trainY, _predict = sess.run([loss_eval, batch_eval_label, predict_eval])
+                _label = np.argmax(_trainY, axis=1)
+                _accuracy = np.mean(_label == _predict)
+                dev_accuracy.append(_accuracy)
+                dev_cross_entropy.append(eval_loss_v)
+            plot.plot('dev accuracy', np.mean(dev_accuracy))
+            plot.plot('dev cross entropy', np.mean(dev_cross_entropy))'''
 
     LOGGER.info('Done!')
 
@@ -452,8 +626,8 @@ if __name__=='__main__':
     output_dir = '../music_sample/out'
     num_epochs = 1
     # Two mini-batches in an epoch
-    train_epoch_size = 128
-    validation_epoch_size = 128
+    train_epoch_size = 2
+    validation_epoch_size = 2
     train_batch_size = 64
     validation_batch_size = 64
     model_type = 'cnn_L3_melspec2'
