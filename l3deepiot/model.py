@@ -99,7 +99,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv1_2"):
             y_a = Conv2D(n_filter_a_1, filt_size_a_1, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay), name='conv1')(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay), name='conv1')(y_a) # Relevant for DeepIoT
         with tf.variable_scope("conv1_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -126,7 +126,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv2_2"):
             y_a = Conv2D(n_filter_a_2, filt_size_a_2, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay), name='conv2')(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay), name='conv2')(y_a) # Relevant for DeepIoT
         with tf.variable_scope("conv2_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -151,7 +151,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         with tf.variable_scope("conv3_2"):
             y_a = Conv2D(n_filter_a_3, filt_size_a_3, padding='same',
                      kernel_initializer='he_normal',
-                     kernel_regularizer=regularizers.l2(weight_decay),name='conv3')(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay),name='conv3')(y_a) # Relevant for DeepIoT
         with tf.variable_scope("conv3_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -181,7 +181,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
             y_a = Conv2D(n_filter_a_4, filt_size_a_4,
                      kernel_initializer='he_normal',
                      name='audio_embedding_layer', padding='same',
-                     kernel_regularizer=regularizers.l2(weight_decay))(y_a)
+                     kernel_regularizer=regularizers.l2(weight_decay))(y_a) # Relevant for DeepIoT
         with tf.variable_scope("conv4_BN2"):
             y_a = BatchNormalization()(y_a)
         y_a = Activation('relu')(y_a)
@@ -190,7 +190,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
         y_a = Lambda(lambda input: DeepIoT_dropout(input, dropOut_prun(prob_list_conv4, prun_thres, sol_train),
                                             is_training=train,
                                             noise_shape=[conv4_shape[0], 1, 1, conv4_shape[3]],
-                                            name='conv4_dropout1'))(y_a)
+                                            name='audio_embedding_layer_dropout1'))(y_a)
         '''y_a, conv4_dropB1 = DeepIoT_dropout(y_a, dropOut_prun(prob_list_conv4, prun_thres, sol_train),
                                             is_training=train,
                                             noise_shape=[conv4_shape[0], 1, 1, conv4_shape[3]],

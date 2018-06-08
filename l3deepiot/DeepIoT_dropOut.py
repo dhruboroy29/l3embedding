@@ -23,6 +23,11 @@ def dropout(x, keep_prob, is_training=False, noise_shape=None, seed=None, name=N
         binary_tensor = math_ops.floor(random_tensor)
         ret = tf.cond(is_training, lambda: x * binary_tensor,
                       lambda: x * keep_prob)
-        out_binary_mask[name[name.index('conv'):name.index('_drop')]] = binary_tensor
+
+        if 'audio_embedding' in name:
+            out_binary_mask['audio_embedding_layer'] = binary_tensor
+        else:
+            out_binary_mask[name[name.index('conv'):name.index('_drop')]] = binary_tensor
+
         ret.set_shape(x.get_shape())
         return ret
