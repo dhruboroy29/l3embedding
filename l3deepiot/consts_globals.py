@@ -46,3 +46,10 @@ org_dim_dict = {u'conv1': n_filter_a_1, u'conv2': n_filter_a_2, u'conv3': n_filt
 
 layer_size_dict = {u'conv1': filt_size_a_1[0] * filt_size_a_1[1], u'conv2': filt_size_a_2[0] * filt_size_a_2[1],
                    u'conv3': filt_size_a_3[0] * filt_size_a_3[1], u'audio_embedding_layer': filt_size_a_4[0] * filt_size_a_4[1]}
+
+# Compressor constants
+START_THRES = 0.0
+FINAL_THRES = 0.825
+THRES_STEP = 33
+UPDATE_STEP = 500
+TOTAL_ITER_NUM = 100000
