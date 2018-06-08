@@ -533,8 +533,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
                 #plot.plot('dev accuracy', np.mean(dev_accuracy))
                 #plot.plot('dev cross entropy', np.mean(dev_cross_entropy))
                 cur_left_num = gen_cur_prun(sess, left_num_dict)
-                print
-                'Left Element in DeepSense:', cur_left_num
+                print('Left Element in L3 embedding:', cur_left_num)
                 cur_comps_ratio = compress_ratio(cur_left_num, org_dim_dict)
                 if cur_comps_ratio < 7.0 and np.mean(dev_accuracy) >= 0.93:
                     break
