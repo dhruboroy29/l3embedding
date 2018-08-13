@@ -11,6 +11,7 @@ import numpy as np
 import keras # Added by Dhrubo
 from keras import backend as K
 from keras.optimizers import Adam
+from keras.models import Model
 import pescador
 from skimage import img_as_float
 
@@ -26,6 +27,7 @@ from googleapiclient import discovery
 
 LOGGER = logging.getLogger('l3deepiot')
 LOGGER.setLevel(logging.DEBUG)
+
 
 class LossHistory(keras.callbacks.Callback):
     """
@@ -285,7 +287,13 @@ def train(train_data_dir, validation_data_dir, output_dir,
     if not os.path.isdir(model_dir):
         os.makedirs(model_dir)
 
+    '''def lossloss(ytrue, ypred):
+        batch_logits = binary_crossentropy(ytrue, ypred)
+        return batch_logits
+        #return K.mean(batch_logits, axis=-1)'''
+
     LOGGER.info('Compiling model...')
+
     m.compile(Adam(lr=learning_rate),
               loss='binary_crossentropy',
               metrics=['accuracy'])
@@ -392,9 +400,10 @@ def train(train_data_dir, validation_data_dir, output_dir,
         random_state=random_state,
         start_batch_idx=train_start_batch_idx)
 
+
     train_gen = pescador.maps.keras_tuples(train_gen,
-                                           ['video', 'audio'],
-                                           'label')
+                                          ['video', 'audio'],
+                                          'label')
 
     LOGGER.info('Setting up validation data generator...')
     val_gen = single_epoch_data_generator(
@@ -419,7 +428,8 @@ def train(train_data_dir, validation_data_dir, output_dir,
         initial_epoch = last_epoch_idx + 1
     else:'''
 
-    initial_epoch = 0
+    #TODO: UNCOMMENT THIS RIGHT AFTER TESTING
+    '''initial_epoch = 0
     history = m.fit_generator(train_gen, train_epoch_size, num_epochs,
                               validation_data=val_gen,
                               validation_steps=validation_epoch_size,
@@ -430,34 +440,13 @@ def train(train_data_dir, validation_data_dir, output_dir,
 
     # Save history
     with open(os.path.join(model_dir, 'history_initcritic.pkl'), 'wb') as fd:
-        pickle.dump(history.history, fd)
+        pickle.dump(history.history, fd)'''
 
     # Initialize compressor
     t_vars = tf.trainable_variables()
     d_vars = [var for var in t_vars if 'audio_model/' in var.name]
 
-    batchLoss = tf.placeholder(tf.float32)
-    batchLossMean, batchLossVar = tf.nn.moments(batchLoss, axes=[0])
-    lossMean = tf.reduce_mean(batchLossMean)
-    lossStd = tf.reduce_mean(tf.sqrt(batchLossVar))
-
-    movingAvg_decay = 0.99
-    ema = tf.train.ExponentialMovingAverage(0.9)
-    maintain_averages_op = ema.apply([lossMean, lossStd])
-
     drop_prob_dict = compressor(d_vars)
-
-    compsLoss = gen_compressor_loss(drop_prob_dict, out_binary_mask, batchLoss, ema, lossMean, lossStd)
-    update_drop_op_dict = update_drop_op(drop_prob_dict, prob_list_dict)
-
-    t_vars = tf.trainable_variables()
-    # no_c_vars = [var for var in t_vars if not 'compressor/' in var.name]
-    c_vars = [var for var in t_vars if 'compressor/' in var.name]
-
-    compsOptimizer = tf.train.RMSPropOptimizer(0.001).minimize(compsLoss,
-                                                               var_list=c_vars, global_step=comps_global_step)
-
-    left_num_dict = count_prun(prob_list_dict, prun_thres)
 
     ###### Start Compressing
     print('Begin compressor-critic joint training phase')
@@ -474,9 +463,9 @@ def train(train_data_dir, validation_data_dir, output_dir,
         random_state=random_state,
         start_batch_idx=train_start_batch_idx)
 
-    train_gen = pescador.maps.keras_tuples(train_gen,
+    '''train_gen = pescador.maps.keras_tuples(train_gen,
                                            ['video', 'audio'],
-                                           'label')
+                                           'label')'''
 
     LOGGER.info('Setting up validation data generator...')
     val_gen = single_epoch_data_generator(
@@ -500,12 +489,43 @@ def train(train_data_dir, validation_data_dir, output_dir,
         thres_update_count = 0
         sess.run(tf.assign(sol_train, 0.0))
         for iteration in range(TOTAL_ITER_NUM):
+            # Generate next batch
+            cur_tr = next(train_gen)
+            # Train Critic (batchwise)
+            hist = m.fit(x={"audio": cur_tr['audio'], "video": cur_tr['video']}, y=cur_tr['label'],
+                             batch_size=train_batch_size)
 
-            # Train Critic (one run)
-            train_next = next(train_gen)
-            history = m.fit(train_next, train_epoch_size, num_epochs=1)
+            # Roundabout way to get logits
+            intermediate_layer_model = Model(inputs=m.input,
+                                             outputs=m.layers[6].output)
+            logits = tf.convert_to_tensor(intermediate_layer_model.predict(
+                x={"audio": cur_tr['audio'], "video": cur_tr['video']}, batch_size=train_batch_size))
+
+            labels = tf.cast(tf.convert_to_tensor(cur_tr['label']), tf.float32) # int64 is not permitted
+            #predict = tf.argmax(logits,axis=-1)
+
+            # Compute crossentropy
+            batchLoss = tf.nn.sigmoid_cross_entropy_with_logits(labels=labels,logits=logits)
+            batchLossMean, batchLossVar = tf.nn.moments(batchLoss, axes=[0])
+            lossMean = tf.reduce_mean(batchLossMean)
+            lossStd = tf.reduce_mean(tf.sqrt(batchLossVar))
+
+            movingAvg_decay = 0.99
+            ema = tf.train.ExponentialMovingAverage(0.9)
+            maintain_averages_op = ema.apply([lossMean, lossStd])
+
+            compsLoss = gen_compressor_loss(drop_prob_dict, out_binary_mask, batchLoss, ema, lossMean, lossStd)
+            update_drop_op_dict = update_drop_op(drop_prob_dict, prob_list_dict)
+
+            t_vars = tf.trainable_variables()
+            # no_c_vars = [var for var in t_vars if not 'compressor/' in var.name]
+            c_vars = [var for var in t_vars if 'compressor/' in var.name]
+
+            compsOptimizer = tf.train.RMSPropOptimizer(0.001).minimize(compsLoss,
+                                                                       var_list=c_vars, global_step=comps_global_step)
+
+            left_num_dict = count_prun(prob_list_dict, prun_thres)
             #_, lossV, _trainY, _predict = sess.run([discOptimizer, loss, batch_label, predict])
-            tf.assign(batchLoss,tf.convert_to_tensor(history.history['loss'])) # Assign loss to tensor
 
             # Train Compressor
             _, compsLossV, _, lossMeanV, lossStdV = \
@@ -523,6 +543,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
             if iteration % 200 == 199:
                 history = m.evaluate_generator(val_gen, steps=validation_epoch_size)
                 dev_accuracy = np.mean(history.history['acc'])
+                # TODO: Add validation here, depending on training time
                 #dev_cross_entropy = []
                 #for eval_idx in range(EVAL_ITER_NUM):
                 #   eval_loss_v, _trainY, _predict = sess.run([loss_eval, batch_eval_label, predict_eval])
@@ -539,7 +560,7 @@ def train(train_data_dir, validation_data_dir, output_dir,
                     break
 
     ###### Start Fine-Tuning critic
-    print('\nBegin fine-tunning critic')
+    print('\nBegin critic fine-tunning phase')
     sess.run(tf.assign(sol_train, 1.0))
     cur_left_num = gen_cur_prun(sess, left_num_dict)
     print('Compressed l3 embedding:', cur_left_num)
@@ -625,8 +646,8 @@ if __name__=='__main__':
     output_dir = '../music_sample/out'
     num_epochs = 1
     # Two mini-batches in an epoch
-    train_epoch_size = 2
-    validation_epoch_size = 2
+    train_epoch_size = 1
+    validation_epoch_size = 1
     train_batch_size = 64
     validation_batch_size = 64
     model_type = 'cnn_L3_melspec2'

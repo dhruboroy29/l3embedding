@@ -77,7 +77,7 @@ def construct_cnn_L3_melspec2_audio_model(batch_size=64, train=True, reuse=False
 
     with tf.variable_scope(name, reuse=reuse) as scope:
         # INPUT
-        x_a = Input(batch_shape=(batch_size, 1, asr * audio_window_dur), dtype='float32')
+        x_a = Input(batch_shape=(batch_size, 1, asr * audio_window_dur), dtype='float32', name='audio')
 
 
         # MELSPECTROGRAM PREPROCESSING
@@ -230,7 +230,7 @@ def construct_cnn_L3_orig_vision_model(batch_size=64, name='vision_model', reuse
     ####
     with tf.variable_scope(name, reuse=reuse) as scope:
         # INPUT
-        x_i = Input(batch_shape=(batch_size, 224, 224, 3), dtype='float32')
+        x_i = Input(batch_shape=(batch_size, 224, 224, 3), dtype='float32', name='video')
 
         # CONV BLOCK 1
         n_filter_i_1 = 64
