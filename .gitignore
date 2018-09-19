@@ -7,4 +7,3 @@ out/
 *.log
 *sample*/
 *test*/
-*.h5
